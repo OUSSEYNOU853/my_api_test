@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,51 +6,115 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/context/AuthContext';
 import { Loader2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const LoginForm = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [activeTab, setActiveTab] = useState('login');
+  const [formError, setFormError] = useState<string | null>(null);
   const { login, register, isLoading } = useAuth();
+
+  // Validation simple
+  const validateEmail = (email: string): boolean => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+
+  const validatePassword = (password: string): boolean => {
+    return password.length >= 6;
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) return;
+    setFormError(null);
+    
+    // Validation
+    if (!email || !password) {
+      setFormError("Veuillez remplir tous les champs");
+      return;
+    }
+    
+    if (!validateEmail(email)) {
+      setFormError("Veuillez entrer une adresse email valide");
+      return;
+    }
+    
+    if (!validatePassword(password)) {
+      setFormError("Le mot de passe doit comporter au moins 6 caractères");
+      return;
+    }
     
     try {
       await login(email, password);
+      // La redirection sera gérée par AuthenticatedApp grâce à isAuthenticated
     } catch (error) {
-      console.error('Login failed:', error);
-      // Error handling is done in the AuthContext
+      console.error('Échec de connexion:', error);
+      // Erreur détaillée affichée par le toast dans AuthContext
     }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email || !password) return;
+    setFormError(null);
+    
+    // Validation
+    if (!name || !email || !password) {
+      setFormError("Veuillez remplir tous les champs");
+      return;
+    }
+    
+    if (name.trim().length < 2) {
+      setFormError("Le nom doit comporter au moins 2 caractères");
+      return;
+    }
+    
+    if (!validateEmail(email)) {
+      setFormError("Veuillez entrer une adresse email valide");
+      return;
+    }
+    
+    if (password.length < 6) {
+      setFormError("Le mot de passe doit comporter au moins 6 caractères");
+      return;
+    }
     
     try {
       await register(name, email, password);
+      // La redirection sera gérée par AuthenticatedApp grâce à isAuthenticated
     } catch (error) {
-      console.error('Registration failed:', error);
-      // Error handling is done in the AuthContext
+      console.error('Échec d\'inscription:', error);
+      // Erreur détaillée affichée par le toast dans AuthContext
     }
+  };
+
+  // Réinitialiser les erreurs lors du changement d'onglet
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    setFormError(null);
   };
 
   return (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold">Financial App</CardTitle>
+        <CardTitle className="text-2xl font-bold">Application Financière</CardTitle>
         <CardDescription>
-          Manage your finances with ease
+          Gérez vos finances en toute simplicité
         </CardDescription>
       </CardHeader>
-      <Tabs defaultValue="login" onValueChange={setActiveTab}>
+      <Tabs defaultValue="login" onValueChange={handleTabChange}>
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="login">Login</TabsTrigger>
-          <TabsTrigger value="register">Register</TabsTrigger>
+          <TabsTrigger value="login">Connexion</TabsTrigger>
+          <TabsTrigger value="register">Inscription</TabsTrigger>
         </TabsList>
+        
+        {formError && (
+          <div className="px-4 pt-4">
+            <Alert variant="destructive">
+              <AlertDescription>{formError}</AlertDescription>
+            </Alert>
+          </div>
+        )}
         
         <TabsContent value="login">
           <form onSubmit={handleLogin}>
@@ -61,7 +124,7 @@ const LoginForm = () => {
                 <Input 
                   id="email" 
                   type="email" 
-                  placeholder="user@example.com" 
+                  placeholder="utilisateur@exemple.com" 
                   value={email} 
                   onChange={(e) => setEmail(e.target.value)} 
                   required 
@@ -69,9 +132,9 @@ const LoginForm = () => {
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">Mot de passe</Label>
                   <a href="#" className="text-sm text-blue-500 hover:text-blue-700">
-                    Forgot password?
+                    Mot de passe oublié?
                   </a>
                 </div>
                 <Input 
@@ -93,10 +156,10 @@ const LoginForm = () => {
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in...
+                    Connexion en cours...
                   </>
                 ) : (
-                  'Sign in'
+                  'Se connecter'
                 )}
               </Button>
             </CardFooter>
@@ -107,11 +170,11 @@ const LoginForm = () => {
           <form onSubmit={handleRegister}>
             <CardContent className="space-y-4 pt-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
+                <Label htmlFor="name">Nom complet</Label>
                 <Input 
                   id="name" 
                   type="text" 
-                  placeholder="John Doe" 
+                  placeholder="Jean Dupont" 
                   value={name} 
                   onChange={(e) => setName(e.target.value)} 
                   required 
@@ -122,14 +185,14 @@ const LoginForm = () => {
                 <Input 
                   id="register-email" 
                   type="email" 
-                  placeholder="user@example.com" 
+                  placeholder="utilisateur@exemple.com" 
                   value={email} 
                   onChange={(e) => setEmail(e.target.value)} 
                   required 
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="register-password">Password</Label>
+                <Label htmlFor="register-password">Mot de passe</Label>
                 <Input 
                   id="register-password" 
                   type="password" 
@@ -149,10 +212,10 @@ const LoginForm = () => {
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating account...
+                    Création du compte...
                   </>
                 ) : (
-                  'Create account'
+                  'Créer un compte'
                 )}
               </Button>
             </CardFooter>

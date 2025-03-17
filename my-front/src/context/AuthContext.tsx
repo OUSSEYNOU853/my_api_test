@@ -1,13 +1,12 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { 
   login as apiLogin, 
   register as apiRegister,
   logout as apiLogout, 
   isAuthenticated as checkAuth,
-  getToken
+  getToken,
+  fetchUserProfile
 } from '@/lib/api';
-import { fetchUserProfile } from '@/lib/api/users';
 import { useToast } from '@/hooks/use-toast';
 
 interface User {
@@ -30,6 +29,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const { toast } = useToast();
 
   // Check for existing authentication on mount
@@ -37,12 +37,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const checkAuthentication = async () => {
       setIsLoading(true);
       try {
+        // Vérifier si un token existe et est valide
         if (checkAuth()) {
-          const userData = await fetchUserProfile();
-          setUser(userData.user || userData); // Handle different API response formats
+          try {
+            const userData = await fetchUserProfile();
+            // Définir l'utilisateur et l'état d'authentification
+            if (userData && (userData.user || userData.id)) {
+              setUser(userData.user || userData);
+              setIsAuthenticated(true);
+            } else {
+              // Si nous avons un token mais pas de données utilisateur valides
+              console.warn('Token présent mais données utilisateur invalides');
+              setIsAuthenticated(false);
+            }
+          } catch (error) {
+            console.error('Erreur lors de la récupération du profil:', error);
+            setIsAuthenticated(false);
+          }
+        } else {
+          setIsAuthenticated(false);
         }
       } catch (error) {
-        console.error('Authentication check failed:', error);
+        console.error('Vérification d\'authentification échouée:', error);
+        setIsAuthenticated(false);
       } finally {
         setIsLoading(false);
       }
@@ -55,18 +72,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     try {
       const response = await apiLogin({ email, password });
-      setUser(response.user || response.data); // Handle different API response formats
+      
+      // Définir l'utilisateur à partir de la réponse
+      const userData = response.user || response.data || response;
+      setUser(userData);
+      
+      // Important: explicitement définir isAuthenticated après une connexion réussie
+      setIsAuthenticated(true);
+      
       toast({
-        title: "Login successful",
-        description: `Welcome back, ${response.user?.name || 'User'}!`,
+        title: "Connexion réussie",
+        description: `Bienvenue, ${userData.name || 'Utilisateur'}!`,
       });
+      
+      return response;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Invalid credentials';
+      const errorMessage = error instanceof Error ? error.message : 'Identifiants invalides';
       toast({
         variant: "destructive",
-        title: "Authentication failed",
+        title: "Échec d'authentification",
         description: errorMessage,
       });
+      setIsAuthenticated(false);
       throw error;
     } finally {
       setIsLoading(false);
@@ -78,28 +105,41 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const response = await apiRegister({ name, email, password });
       
-      // Ensure we're setting the user correctly
+      // Traiter différents formats de réponse possibles
+      let userData;
       if (response.user) {
-        setUser(response.user);
+        userData = response.user;
       } else if (response.data) {
-        setUser(response.data);
+        userData = response.data;
+      } else if (response.id) {
+        userData = response;
       } else if (getToken()) {
-        // If we have a token but no user data, try to fetch the user profile
-        const userData = await fetchUserProfile();
-        setUser(userData.user || userData);
+        // Si nous avons un token mais pas de données utilisateur, essayer de récupérer le profil
+        const profileData = await fetchUserProfile();
+        userData = profileData.user || profileData;
       }
       
-      toast({
-        title: "Registration successful",
-        description: `Welcome, ${name}!`,
-      });
+      if (userData) {
+        setUser(userData);
+        setIsAuthenticated(true);
+        
+        toast({
+          title: "Inscription réussie",
+          description: `Bienvenue, ${name}!`,
+        });
+        
+        return response;
+      } else {
+        throw new Error("Impossible de récupérer les données utilisateur après l'inscription");
+      }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Registration failed';
+      const errorMessage = error instanceof Error ? error.message : "L'inscription a échoué";
       toast({
         variant: "destructive",
-        title: "Registration failed",
+        title: "Échec d'inscription",
         description: errorMessage,
       });
+      setIsAuthenticated(false);
       throw error;
     } finally {
       setIsLoading(false);
@@ -110,15 +150,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     try {
       await apiLogout();
-      setUser(null);
       toast({
-        title: "Logged out",
-        description: "You have been successfully logged out.",
+        title: "Déconnexion",
+        description: "Vous avez été déconnecté avec succès.",
       });
     } catch (error) {
-      console.error('Logout failed:', error);
+      console.error('Échec de la déconnexion:', error);
     } finally {
+      // Toujours réinitialiser l'état, même si l'API de déconnexion échoue
       setUser(null);
+      setIsAuthenticated(false);
       setIsLoading(false);
     }
   };
@@ -128,7 +169,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       value={{
         user,
         isLoading,
-        isAuthenticated: !!user,
+        isAuthenticated,
         login,
         register,
         logout,
@@ -142,7 +183,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error('useAuth doit être utilisé à l\'intérieur d\'un AuthProvider');
   }
   return context;
 };
