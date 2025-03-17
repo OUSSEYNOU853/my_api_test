@@ -1,8 +1,6 @@
 export const BASE_URL = process.env.NODE_ENV === 'production' 
   ? 'https://votre-domaine-api.com' 
   : 'http://127.0.0.1:8000';
-
-// Désactiver le mode démo pour utiliser de vraies données
 export const DEMO_MODE = false;
 
 // Endpoints API

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -25,69 +26,83 @@ const Dashboard = () => {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newTransaction, setNewTransaction] = useState({
     amount: '',
-    type: 'expense',
+    type: 'debit',
     description: '',
-    category: ''
   });
   const [summary, setSummary] = useState({
     balance: 0,
-    income: 0,
-    expense: 0
+    credit: 0,
+    debit: 0
   });
 
   // Calculate summary values
   useEffect(() => {
     if (transactions.length > 0) {
-      const totalIncome = transactions
-        .filter(t => t.type === 'income')
+      const totalcredit = transactions
+        .filter(t => t.type === 'credit')
         .reduce((sum, t) => sum + (typeof t.amount === 'number' ? t.amount : 0), 0);
       
-      const totalExpense = transactions
-        .filter(t => t.type === 'expense')
+      const totaldebit = transactions
+        .filter(t => t.type === 'debit')
         .reduce((sum, t) => sum + (typeof t.amount === 'number' ? Math.abs(t.amount) : 0), 0);
       
       setSummary({
-        income: totalIncome,
-        expense: totalExpense,
-        balance: totalIncome - totalExpense
+        credit: totalcredit,
+        debit: totaldebit,
+        balance: totalcredit - totaldebit
       });
     }
   }, [transactions]);
 
-  useEffect(() => {
-    fetchUserTransactions();
-  }, []);
+  // useEffect(() => {
+  //   fetchUserTransactions();
+  // }, []);
 
   const handleRefresh = () => {
     fetchUserTransactions();
   };
 
-  const handleAddTransaction = async () => {
-    if (!newTransaction.amount || !newTransaction.description) return;
-    
-    const amount = parseFloat(newTransaction.amount);
-    if (isNaN(amount) || amount <= 0) return;
-    
-    try {
-      await addTransaction({
-        amount,
-        type: newTransaction.type,
-        description: newTransaction.description,
-        category: newTransaction.category || undefined
-      });
-      
-      // Reset form and close dialog
-      setNewTransaction({
-        amount: '',
-        type: 'expense',
-        description: '',
-        category: ''
-      });
-      setShowAddDialog(false);
-    } catch (error) {
-      console.error('Failed to add transaction:', error);
+  // Dans Dashboard.tsx
+useEffect(() => {
+  const loadTransactions = async () => {
+    if (user && user.id) {
+      // Utilisez directement l'ID si disponible dans le contexte utilisateur
+      await fetchUserTransactions(user.id);
+    } else {
+      // Sinon, la fonction fetchUserTransactions récupérera l'ID via getCurrentUserId
+      await fetchUserTransactions();
     }
   };
+  
+  loadTransactions();
+}, [user]);
+
+const handleAddTransaction = async () => {
+  if (!newTransaction.amount || !newTransaction.description) return;
+  
+  const amount = parseFloat(newTransaction.amount);
+  if (isNaN(amount) || amount <= 0) return;
+  
+  try {
+    // Utiliser l'ID de l'utilisateur s'il est disponible
+    const userId = user?.id;
+    await addTransaction({
+      amount,
+      type: newTransaction.type,
+      description: newTransaction.description,
+    }, userId);
+    
+    // Reset form and close dialog
+    setNewTransaction({
+      amount: '',
+      type: 'debit',
+      description: ''
+    });
+    setShowAddDialog(false);
+  } catch (error) {
+    console.error('Failed to add transaction:', error);
+  }
+};
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -119,17 +134,17 @@ const Dashboard = () => {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Income</CardDescription>
+            <CardDescription>credit</CardDescription>
             <CardTitle className="text-2xl text-green-600">
-              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(summary.income)}
+              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(summary.credit)}
             </CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Expenses</CardDescription>
+            <CardDescription>debits</CardDescription>
             <CardTitle className="text-2xl text-red-600">
-              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(summary.expense)}
+              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(summary.debit)}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -185,8 +200,8 @@ const Dashboard = () => {
                       <SelectValue placeholder="Transaction Type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="income">Income</SelectItem>
-                      <SelectItem value="expense">Expense</SelectItem>
+                      <SelectItem value="credit">credit</SelectItem>
+                      <SelectItem value="debit">debit</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -199,18 +214,6 @@ const Dashboard = () => {
                     placeholder="Transaction description"
                     value={newTransaction.description}
                     onChange={(e) => setNewTransaction({ ...newTransaction, description: e.target.value })}
-                    className="col-span-3"
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="category" className="text-right">
-                    Category
-                  </Label>
-                  <Input
-                    id="category"
-                    placeholder="Optional category"
-                    value={newTransaction.category}
-                    onChange={(e) => setNewTransaction({ ...newTransaction, category: e.target.value })}
                     className="col-span-3"
                   />
                 </div>

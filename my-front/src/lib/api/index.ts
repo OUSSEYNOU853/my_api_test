@@ -120,10 +120,47 @@ export const logout = async () => {
 };
 
 // Utilisateurs
+// export const fetchUserProfile = async () => {
+//   try {
+//     const response = await fetchWithTimeout(
+//       `${BASE_URL}${API_URL.user.replace(':id', 'me')}`,
+//       {
+//         method: 'GET',
+//         headers: getDefaultHeaders(),
+//       }
+//     );
+//     return response;
+//   } catch (error) {
+//     return handleApiError(error);
+//   }
+// };
+
+// Fonction pour obtenir l'ID réel de l'utilisateur connecté
+// Ajoutons une fonction pour décoder le token JWT et extraire l'ID utilisateur
+export const getUserIdFromToken = (): number | null => {
+  const token = getToken();
+  if (!token) return null;
+  
+  try {
+    // Décodage simple du JWT (payload est dans la 2e partie)
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.sub || payload.id || null;
+  } catch (error) {
+    console.error("Erreur lors du décodage du token:", error);
+    return null;
+  }
+};
+
+// Transactions
 export const fetchUserProfile = async () => {
   try {
+    const userId = getUserIdFromToken();
+    if (!userId) {
+      throw new Error("Utilisateur non authentifié");
+    }
+    
     const response = await fetchWithTimeout(
-      `${BASE_URL}${API_URL.user.replace(':id', 'me')}`,
+      `${BASE_URL}${API_URL.user.replace(':id', userId.toString())}`,
       {
         method: 'GET',
         headers: getDefaultHeaders(),
@@ -135,26 +172,45 @@ export const fetchUserProfile = async () => {
   }
 };
 
-// Transactions
-export const fetchTransactions = async (userId?: string, params?: any) => {
-  const userIdToUse = userId || 'me';
-  let url = `${BASE_URL}${API_URL.transactions.replace(':id', userIdToUse)}`;
-  
-  // Ajouter les paramètres de requête si disponibles
-  if (params) {
-    const queryParams = new URLSearchParams();
-    Object.keys(params).forEach(key => {
-      if (params[key] !== undefined && params[key] !== null) {
-        queryParams.append(key, params[key]);
-      }
-    });
-    
-    if (queryParams.toString()) {
-      url += `?${queryParams.toString()}`;
-    }
-  }
-  
+// Ajustez getUserProfile pour ne plus utiliser "me" comme ID
+export const getUserProfile = async () => {
   try {
+    const userId = getUserIdFromToken();
+    if (!userId) {
+      throw new Error("Utilisateur non authentifié");
+    }
+    
+    const response = await fetchWithTimeout(
+      `${BASE_URL}${API_URL.user.replace(':id', userId.toString())}`,
+      {
+        method: 'GET',
+        headers: getDefaultHeaders(),
+      }
+    );
+    return response;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+export const fetchTransactions = async (userId: string, params?: any) => {
+  try {
+    // Construire l'URL avec les paramètres si fournis
+    let url = `${BASE_URL}${API_URL.transactions.replace(':id', userId)}`;
+    
+    if (params) {
+      const queryParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          queryParams.append(key, value.toString());
+        }
+      });
+      
+      if (queryParams.toString()) {
+        url += `?${queryParams.toString()}`;
+      }
+    }
+    
     const response = await fetchWithTimeout(
       url,
       {
@@ -162,24 +218,72 @@ export const fetchTransactions = async (userId?: string, params?: any) => {
         headers: getDefaultHeaders(),
       }
     );
+    
     return response;
   } catch (error) {
     return handleApiError(error);
   }
 };
 
+// Mise à jour de fetchTransactionsWithProfile pour mieux gérer l'ID
+export const fetchTransactionsWithProfile = async (userId?: string, params?: any) => {
+  try {
+    let actualUserId = userId;
+    
+    // Si userId n'est pas fourni, récupérer l'ID depuis le token JWT
+    if (!actualUserId) {
+      actualUserId = getUserIdFromToken();
+      
+      if (!actualUserId) {
+        throw new Error("ID utilisateur non disponible. Veuillez vous connecter.");
+      }
+    }
+    
+    // Utiliser l'ID récupéré pour chercher les transactions
+    return await fetchTransactions(actualUserId.toString(), params);
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+// Mise à jour de createTransaction pour s'assurer que les données sont correctement formatées
+// Mise à jour de createTransaction pour s'assurer que les données sont correctement formatées
 export const createTransaction = async (
   userId?: string, 
-  transactionData: { amount: number; type: string; description: string; category?: string }
+  transactionData?: { amount: number; type: string; description: string; category?: string }
 ) => {
-  const userIdToUse = userId || 'me';
   try {
+    // Obtenir l'ID utilisateur depuis le token si non fourni
+    const actualUserId = userId || getUserIdFromToken();
+    
+    if (!actualUserId) {
+      throw new Error("ID utilisateur non disponible");
+    }
+    
+    // Validation du type
+    const validTypes = ['credit', 'debit', 'transfer']; // Remplacez par les types valides selon votre backend
+    if (!validTypes.includes(transactionData.type)) {
+      throw new Error(`Type de transaction invalide. Utilisez un des types suivants: ${validTypes.join(', ')}`);
+    }
+    
+    // Formatage des données pour correspondre au schéma du backend
+    const formattedData = {
+      user_id: actualUserId, // Ajout explicite de user_id
+      amount: typeof transactionData.amount === 'string' 
+        ? parseFloat(transactionData.amount).toFixed(2) 
+        : parseFloat(transactionData.amount.toString()).toFixed(2),
+      type: transactionData.type,
+      description: transactionData.description
+    };
+    
+    console.log('Données envoyées au serveur:', formattedData);
+    
     const response = await fetchWithTimeout(
-      `${BASE_URL}${API_URL.transactions.replace(':id', userIdToUse)}`,
+      `${BASE_URL}${API_URL.transactions.replace(':id', actualUserId.toString())}`,
       {
         method: 'POST',
         headers: getDefaultHeaders(),
-        body: JSON.stringify(transactionData),
+        body: JSON.stringify(formattedData),
       }
     );
     return response;

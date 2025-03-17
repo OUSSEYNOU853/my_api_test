@@ -1,13 +1,12 @@
 
-// Shared type definitions for the API
-
-export interface Transaction {
-  id: string;
-  date: string;
-  description: string;
+interface Transaction {
+  id: number;
+  user_id: number;
   amount: number;
-  type: 'income' | 'expense';
-  category: string;
+  type: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface User {
